@@ -1,0 +1,138 @@
+{
+  "timestamp": "2025-12-31T15:09:46.222588",
+  "n_samples": 50,
+  "experiments": {
+    "baseline_comparison": {
+      "experiment": "baseline_comparison",
+      "n_rounds": 2,
+      "results": {
+        "baselines": {
+          "llama3.1:8b": {
+            "accuracy": 0.78,
+            "correct": 39,
+            "total": 50
+          },
+          "mistral:7b": {
+            "accuracy": 0.42,
+            "correct": 21,
+            "total": 50
+          },
+          "phi3:medium": {
+            "accuracy": 0.66,
+            "correct": 33,
+            "total": 50
+          }
+        },
+        "debate": {
+          "models": [
+            "llama3.1:8b",
+            "mistral:7b",
+            "phi3:medium"
+          ],
+          "accuracy": 0.78,
+          "correct": 39,
+          "total": 50
+        }
+      }
+    },
+    "num_agents": {
+      "experiment": "num_agents",
+      "n_rounds": 2,
+      "results": {
+        "2_agents": {
+          "models": [
+            "llama3.1:8b",
+            "mistral:7b"
+          ],
+          "accuracy": 0.7,
+          "correct": 35,
+          "total": 50
+        },
+        "3_agents": {
+          "models": [
+            "llama3.1:8b",
+            "mistral:7b",
+            "phi3:medium"
+          ],
+          "accuracy": 0.76,
+          "correct": 38,
+          "total": 50
+        }
+      }
+    },
+    "num_rounds": {
+      "experiment": "num_rounds",
+      "models": [
+        "llama3.1:8b",
+        "mistral:7b",
+        "phi3:medium"
+      ],
+      "results": {
+        "1_rounds": {
+          "n_rounds": 1,
+          "accuracy": 0.8,
+          "correct": 40,
+          "total": 50
+        },
+        "2_rounds": {
+          "n_rounds": 2,
+          "accuracy": 0.84,
+          "correct": 42,
+          "total": 50
+        },
+        "3_rounds": {
+          "n_rounds": 3,
+          "accuracy": 0.78,
+          "correct": 39,
+          "total": 50
+        }
+      }
+    },
+    "model_combinations": {
+      "experiment": "model_combinations",
+      "n_rounds": 2,
+      "results": {
+        "homogeneous_llama": {
+          "models": [
+            "llama3.1:8b",
+            "llama3.1:8b",
+            "llama3.1:8b"
+          ],
+          "accuracy": 0.76,
+          "correct": 38,
+          "total": 50
+        },
+        "homogeneous_mistral": {
+          "models": [
+            "mistral:7b",
+            "mistral:7b",
+            "mistral:7b"
+          ],
+          "accuracy": 0.44,
+          "correct": 22,
+          "total": 50
+        },
+        "heterogeneous_default": {
+          "models": [
+            "llama3.1:8b",
+            "mistral:7b",
+            "phi3:medium"
+          ],
+          "accuracy": 0.78,
+          "correct": 39,
+          "total": 50
+        },
+        "heterogeneous_llama_mistral": {
+          "models": [
+            "llama3.1:8b",
+            "llama3.1:8b",
+            "mistral:7b"
+          ],
+          "accuracy": 0.76,
+          "correct": 38,
+          "total": 50
+        }
+      }
+    }
+  }
+}

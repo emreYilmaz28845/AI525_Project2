@@ -1,0 +1,10 @@
+# Multi-Agent Debate System Dependencies
+
+# Ollama Python client for LLM inference
+ollama>=0.1.0
+
+# Hugging Face datasets for GSM8K
+datasets>=2.14.0
+
+# Progress bar for evaluation
+tqdm>=4.65.0
