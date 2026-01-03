@@ -133,10 +133,10 @@ def run_test_mode(n_samples: int = 5, verbose: bool = True):
     quick_test(n_questions=n_samples, verbose=verbose)
 
 
-def run_evaluation_mode(n_samples: int = 100, verbose: bool = False):
+def run_evaluation_mode(n_samples: int = 100, n_rounds: int = 2, verbose: bool = False):
     """Run full evaluation mode."""
     print("=" * 60)
-    print(f"EVALUATION MODE ({n_samples} samples)")
+    print(f"EVALUATION MODE ({n_samples} samples, {n_rounds} rounds)")
     print("=" * 60)
 
     if not check_and_setup_models(DEFAULT_MODELS):
@@ -149,7 +149,7 @@ def run_evaluation_mode(n_samples: int = 100, verbose: bool = False):
         samples=samples,
         debate_models=DEFAULT_MODELS,
         baseline_model=DEFAULT_MODELS[0],
-        n_rounds=2,
+        n_rounds=n_rounds,
         verbose=verbose
     )
 
@@ -158,7 +158,7 @@ def run_evaluation_mode(n_samples: int = 100, verbose: bool = False):
         analyze_debate_patterns(comparison["debate"])
 
     # Save results
-    save_metrics(comparison, f"evaluation_n{n_samples}.json")
+    save_metrics(comparison, f"evaluation_n{n_samples}_r{n_rounds}.json")
 
     print("\nEvaluation complete! Results saved to results/metrics/")
 
@@ -216,6 +216,13 @@ def main():
         help="Custom models to use (space-separated)"
     )
 
+    parser.add_argument(
+        "--rounds",
+        type=int,
+        default=2,
+        help="Number of debate rounds (default: 2)"
+    )
+
     args = parser.parse_args()
 
     # Update default models if custom ones provided
@@ -241,7 +248,7 @@ def main():
     elif args.mode == "test":
         run_test_mode(n_samples=n_samples, verbose=args.verbose)
     elif args.mode == "evaluate":
-        run_evaluation_mode(n_samples=n_samples, verbose=args.verbose)
+        run_evaluation_mode(n_samples=n_samples, n_rounds=args.rounds, verbose=args.verbose)
     elif args.mode == "experiments":
         run_experiments_mode(n_samples=n_samples, verbose=args.verbose)
     else:
