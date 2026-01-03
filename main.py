@@ -32,7 +32,7 @@ from utils import save_metrics, answers_match
 
 
 # Default models
-DEFAULT_MODELS = ["llama3.1:8b", "mistral:7b", "phi3:medium"]
+DEFAULT_MODELS = ["llama3.1:8b", "qwen2.5:7b", "phi3:medium"]
 
 
 def check_and_setup_models(models: list) -> bool:

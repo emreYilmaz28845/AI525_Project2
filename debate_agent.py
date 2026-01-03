@@ -255,7 +255,7 @@ class MultiAgentDebate:
             temperature: Sampling temperature for all agents
         """
         if models is None:
-            models = ["llama3.1:8b", "mistral:7b", "phi3:medium"]
+            models = ["llama3.1:8b", "qwen2.5:7b", "phi3:medium"]
 
         self.models = models
         self.temperature = temperature

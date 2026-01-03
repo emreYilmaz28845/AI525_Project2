@@ -35,7 +35,7 @@ def experiment_num_agents(
         Experiment results
     """
     if base_models is None:
-        base_models = ["llama3.1:8b", "mistral:7b", "phi3:medium"]
+        base_models = ["llama3.1:8b", "qwen2.5:7b", "phi3:medium"]
 
     print("=" * 60)
     print("EXPERIMENT: Number of Agents")
@@ -110,7 +110,7 @@ def experiment_num_rounds(
         Experiment results
     """
     if models is None:
-        models = ["llama3.1:8b", "mistral:7b", "phi3:medium"]
+        models = ["llama3.1:8b", "qwen2.5:7b", "phi3:medium"]
 
     print("=" * 60)
     print("EXPERIMENT: Number of Rounds")
@@ -167,10 +167,10 @@ def experiment_model_combinations(
     combinations = [
         # Homogeneous (same model)
         ("homogeneous_llama", ["llama3.1:8b", "llama3.1:8b", "llama3.1:8b"]),
-        ("homogeneous_mistral", ["mistral:7b", "mistral:7b", "mistral:7b"]),
+        ("homogeneous_qwen", ["qwen2.5:7b", "qwen2.5:7b", "qwen2.5:7b"]),
         # Heterogeneous (different models)
-        ("heterogeneous_default", ["llama3.1:8b", "mistral:7b", "phi3:medium"]),
-        ("heterogeneous_llama_mistral", ["llama3.1:8b", "llama3.1:8b", "mistral:7b"]),
+        ("heterogeneous_default", ["llama3.1:8b", "qwen2.5:7b", "phi3:medium"]),
+        ("heterogeneous_llama_qwen", ["llama3.1:8b", "llama3.1:8b", "qwen2.5:7b"]),
     ]
 
     print("=" * 60)
@@ -240,7 +240,7 @@ def experiment_baseline_comparison(
         Comparison results
     """
     if models is None:
-        models = ["llama3.1:8b", "mistral:7b", "phi3:medium"]
+        models = ["llama3.1:8b", "qwen2.5:7b", "phi3:medium"]
 
     print("=" * 60)
     print("EXPERIMENT: Baseline vs Debate")

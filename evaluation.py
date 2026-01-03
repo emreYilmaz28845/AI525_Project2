@@ -69,7 +69,7 @@ def evaluate_debate_system(
         Dictionary with evaluation metrics
     """
     if models is None:
-        models = ["llama3.1:8b", "mistral:7b", "phi3:medium"]
+        models = ["llama3.1:8b", "qwen2.5:7b", "phi3:medium"]
 
     debate_system = MultiAgentDebate(models=models)
     logger = DebateLogger() if log_results else None
@@ -390,7 +390,7 @@ def quick_test(n_questions: int = 5, verbose: bool = True):
 
     # Test multi-agent debate
     print("\n--- Testing Multi-Agent Debate ---")
-    debate = MultiAgentDebate(models=["llama3.1:8b", "mistral:7b", "phi3:medium"])
+    debate = MultiAgentDebate(models=["llama3.1:8b", "qwen2.5:7b", "phi3:medium"])
     debate_result = debate.debate(
         question=samples[0]["question"],
         n_rounds=2,
