@@ -133,10 +133,14 @@ def run_test_mode(n_samples: int = 5, verbose: bool = True):
     quick_test(n_questions=n_samples, verbose=verbose)
 
 
-def run_evaluation_mode(n_samples: int = 100, n_rounds: int = 2, verbose: bool = False):
+def run_evaluation_mode(n_samples: int = 100, n_rounds: int = 2, baseline_model: str = None, verbose: bool = False):
     """Run full evaluation mode."""
+    if baseline_model is None:
+        baseline_model = DEFAULT_MODELS[0]
+
     print("=" * 60)
     print(f"EVALUATION MODE ({n_samples} samples, {n_rounds} rounds)")
+    print(f"Baseline model: {baseline_model}")
     print("=" * 60)
 
     if not check_and_setup_models(DEFAULT_MODELS):
@@ -148,7 +152,7 @@ def run_evaluation_mode(n_samples: int = 100, n_rounds: int = 2, verbose: bool =
     comparison = compare_methods(
         samples=samples,
         debate_models=DEFAULT_MODELS,
-        baseline_model=DEFAULT_MODELS[0],
+        baseline_model=baseline_model,
         n_rounds=n_rounds,
         verbose=verbose
     )
@@ -223,6 +227,13 @@ def main():
         help="Number of debate rounds (default: 2)"
     )
 
+    parser.add_argument(
+        "--baseline-model",
+        type=str,
+        default=None,
+        help="Model to use for single-agent baseline (default: first model in --models)"
+    )
+
     args = parser.parse_args()
 
     # Update default models if custom ones provided
@@ -248,7 +259,7 @@ def main():
     elif args.mode == "test":
         run_test_mode(n_samples=n_samples, verbose=args.verbose)
     elif args.mode == "evaluate":
-        run_evaluation_mode(n_samples=n_samples, n_rounds=args.rounds, verbose=args.verbose)
+        run_evaluation_mode(n_samples=n_samples, n_rounds=args.rounds, baseline_model=args.baseline_model, verbose=args.verbose)
     elif args.mode == "experiments":
         run_experiments_mode(n_samples=n_samples, verbose=args.verbose)
     else:
