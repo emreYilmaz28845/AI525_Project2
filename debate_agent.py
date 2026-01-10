@@ -9,8 +9,12 @@ import time
 
 from utils import (
     extract_answer,
+    extract_confidence,
     format_prompt_initial,
-    format_prompt_debate
+    format_prompt_debate,
+    format_prompt_verification,
+    format_prompt_tiebreaker,
+    weighted_vote
 )
 
 
@@ -20,7 +24,7 @@ class DebateAgent:
     Uses Ollama for LLM inference.
     """
 
-    def __init__(self, agent_id: str, model_name: str, temperature: float = 0.7):
+    def __init__(self, agent_id: str, model_name: str, temperature: float = 0.1):
         """
         Initialize a debate agent.
 
@@ -76,15 +80,17 @@ class DebateAgent:
         prompt = format_prompt_initial(question, self.agent_id)
         response = self._generate(prompt)
 
-        # Extract numerical answer
+        # Extract numerical answer and confidence
         extracted = extract_answer(response)
+        confidence = extract_confidence(response)
 
         # Store in history
         result = {
             "round": 0,
             "prompt": prompt,
             "response": response,
-            "extracted_answer": extracted
+            "extracted_answer": extracted,
+            "confidence": confidence
         }
         self.history.append(result)
 
@@ -116,8 +122,9 @@ class DebateAgent:
 
         response = self._generate(prompt)
 
-        # Extract numerical answer
+        # Extract numerical answer and confidence
         extracted = extract_answer(response)
+        confidence = extract_confidence(response)
 
         # Store in history
         result = {
@@ -125,6 +132,7 @@ class DebateAgent:
             "prompt": prompt,
             "response": response,
             "extracted_answer": extracted,
+            "confidence": confidence,
             "other_responses": other_responses
         }
         self.history.append(result)
@@ -141,6 +149,28 @@ class DebateAgent:
         if not self.history:
             return None
         return self.history[-1].get("extracted_answer")
+
+    def get_final_confidence(self) -> str:
+        """
+        Get the agent's final confidence level.
+
+        Returns:
+            Confidence level: "HIGH", "MEDIUM", or "LOW"
+        """
+        if not self.history:
+            return "MEDIUM"
+        return self.history[-1].get("confidence", "MEDIUM")
+
+    def get_final_response(self) -> str:
+        """
+        Get the agent's final response text.
+
+        Returns:
+            Response text or empty string
+        """
+        if not self.history:
+            return ""
+        return self.history[-1].get("response", "")
 
     def get_answer_history(self) -> List[Optional[float]]:
         """
@@ -246,7 +276,7 @@ class MultiAgentDebate:
     Orchestrates multi-agent debate for solving problems.
     """
 
-    def __init__(self, models: List[str] = None, temperature: float = 0.7):
+    def __init__(self, models: List[str] = None, temperature: float = 0.1):
         """
         Initialize the debate system.
 
@@ -266,15 +296,162 @@ class MultiAgentDebate:
         for agent_id, model in zip(agent_ids, models):
             self.agents.append(DebateAgent(agent_id, model, temperature))
 
-    def debate(self, question: str, n_rounds: int = 2,
-               verbose: bool = True) -> Dict[str, Any]:
+    def _check_early_consensus(self, verbose: bool = False) -> Optional[Dict[str, Any]]:
         """
-        Run a multi-agent debate on a question.
+        Check if all agents agree on the same answer (early stopping condition).
+
+        Returns:
+            Dict with consensus info if all agree, None otherwise
+        """
+        answers = [agent.get_final_answer() for agent in self.agents]
+        valid_answers = [a for a in answers if a is not None]
+
+        if not valid_answers:
+            return None
+
+        # Check if all answers are the same
+        if len(set(valid_answers)) == 1 and len(valid_answers) == len(self.agents):
+            confidences = [agent.get_final_confidence() for agent in self.agents]
+            # All agree and at least one has HIGH confidence
+            if "HIGH" in confidences:
+                if verbose:
+                    print("\n[EARLY STOPPING] All agents agree with high confidence!")
+                return {
+                    "answer": valid_answers[0],
+                    "method": "early_consensus",
+                    "confidences": confidences
+                }
+        return None
+
+    def _run_verification(self, question: str, proposed_answer: float,
+                          verbose: bool = False) -> Dict[str, Any]:
+        """
+        Run a verification round to double-check the consensus answer.
+
+        Args:
+            question: Original problem
+            proposed_answer: The answer to verify
+            verbose: Whether to print progress
+
+        Returns:
+            Dict with verification result
+        """
+        if verbose:
+            print(f"\n{'='*60}")
+            print("VERIFICATION ROUND")
+            print('='*60)
+
+        # Collect all agent solutions
+        agent_solutions = [
+            {"response": agent.get_final_response()}
+            for agent in self.agents
+        ]
+
+        # Use the first agent's model for verification
+        verifier = DebateAgent("Verifier", self.models[0], self.temperature)
+        prompt = format_prompt_verification(question, proposed_answer, agent_solutions)
+        response = verifier._generate(prompt)
+
+        if verbose:
+            print(f"Verifier response preview: {response[:300]}...")
+
+        # Parse verification result
+        response_upper = response.upper()
+        if "VERIFIED" in response_upper:
+            if verbose:
+                print(f"[VERIFIED] Answer {proposed_answer} confirmed correct")
+            return {
+                "verified": True,
+                "original_answer": proposed_answer,
+                "final_answer": proposed_answer,
+                "response": response
+            }
+        elif "REJECTED" in response_upper:
+            # Extract the corrected answer
+            from utils import extract_answer
+            corrected = extract_answer(response)
+            if verbose:
+                print(f"[REJECTED] Verifier suggests: {corrected}")
+            return {
+                "verified": False,
+                "original_answer": proposed_answer,
+                "final_answer": corrected if corrected is not None else proposed_answer,
+                "response": response
+            }
+        else:
+            # Unclear response, stick with original
+            return {
+                "verified": None,
+                "original_answer": proposed_answer,
+                "final_answer": proposed_answer,
+                "response": response
+            }
+
+    def _run_tiebreaker(self, question: str, tied_answers: List[float],
+                        verbose: bool = False) -> Dict[str, Any]:
+        """
+        Run a tie-breaking round when agents disagree.
+
+        Args:
+            question: Original problem
+            tied_answers: List of tied answers
+            verbose: Whether to print progress
+
+        Returns:
+            Dict with tie-breaking result
+        """
+        if verbose:
+            print(f"\n{'='*60}")
+            print("TIE-BREAKER ROUND")
+            print(f"Tied answers: {tied_answers}")
+            print('='*60)
+
+        # Collect all agent solutions with their answers
+        agent_solutions = [
+            {
+                "agent_id": agent.agent_id,
+                "response": agent.get_final_response(),
+                "answer": agent.get_final_answer()
+            }
+            for agent in self.agents
+        ]
+
+        # Use a different model for judging if available, otherwise use first
+        judge_model = self.models[-1] if len(self.models) > 1 else self.models[0]
+        judge = DebateAgent("Judge", judge_model, self.temperature)
+
+        prompt = format_prompt_tiebreaker(question, tied_answers, agent_solutions)
+        response = judge._generate(prompt)
+
+        if verbose:
+            print(f"Judge response preview: {response[:300]}...")
+
+        # Extract the judge's answer
+        from utils import extract_answer
+        judged_answer = extract_answer(response)
+
+        if verbose:
+            print(f"Judge's decision: {judged_answer}")
+
+        return {
+            "method": "judge_tiebreaker",
+            "tied_answers": tied_answers,
+            "judged_answer": judged_answer,
+            "response": response
+        }
+
+    def debate(self, question: str, n_rounds: int = 2,
+               verbose: bool = True, enable_verification: bool = True,
+               enable_early_stopping: bool = True) -> Dict[str, Any]:
+        """
+        Run a multi-agent debate on a question with improved features.
 
         Args:
             question: The math problem to solve
             n_rounds: Number of debate rounds (including initial)
             verbose: Whether to print progress
+            enable_verification: Whether to run verification round
+            enable_early_stopping: Whether to stop early if all agents agree
 
         Returns:
             Dictionary with debate results
@@ -284,6 +461,9 @@ class MultiAgentDebate:
             agent.reset()
 
         rounds_data = []
+        early_stopped = False
+        verification_result = None
+        tiebreaker_result = None
 
         # Round 0: Initial answers
         if verbose:
@@ -297,54 +477,108 @@ class MultiAgentDebate:
             round_0_data[agent.agent_id] = {
                 "model": agent.model_name,
                 "response": result["response"],
-                "answer": result["extracted_answer"]
+                "answer": result["extracted_answer"],
+                "confidence": result["confidence"]
             }
             if verbose:
                 print(f"\nAgent {agent.agent_id} ({agent.model_name}):")
                 print(f"Answer: {result['extracted_answer']}")
+                print(f"Confidence: {result['confidence']}")
                 print(f"Response preview: {result['response'][:200]}...")
 
         rounds_data.append(round_0_data)
 
-        # Debate rounds
-        for round_num in range(1, n_rounds):
-            if verbose:
-                print(f"\n{'='*60}")
-                print(f"ROUND {round_num}: Debate")
-                print('='*60)
-
-            round_data = {}
-
-            for agent in self.agents:
-                # Gather other agents' responses
-                other_responses = []
-                for other_agent in self.agents:
-                    if other_agent.agent_id != agent.agent_id:
-                        other_responses.append({
-                            "agent_id": other_agent.agent_id,
-                            "response": other_agent.history[-1]["response"]
-                        })
-
-                result = agent.debate_round(question, other_responses, round_num)
-                round_data[agent.agent_id] = {
-                    "model": agent.model_name,
-                    "response": result["response"],
-                    "answer": result["extracted_answer"]
+        # Check for early consensus after Round 0
+        if enable_early_stopping:
+            early_result = self._check_early_consensus(verbose)
+            if early_result:
+                early_stopped = True
+                consensus = early_result["answer"]
+                vote_result = {
+                    "answer": consensus,
+                    "method": "early_consensus",
+                    "is_tie": False
                 }
 
+        # Debate rounds (skip if early stopped)
+        if not early_stopped:
+            for round_num in range(1, n_rounds):
                 if verbose:
-                    print(f"\nAgent {agent.agent_id} ({agent.model_name}):")
-                    print(f"Answer: {result['extracted_answer']}")
-                    changed = "CHANGED" if agent.changed_answer() else "unchanged"
-                    print(f"Status: {changed}")
+                    print(f"\n{'='*60}")
+                    print(f"ROUND {round_num}: Debate")
+                    print('='*60)
 
-            rounds_data.append(round_data)
+                round_data = {}
 
-        # Collect final answers and determine consensus
-        final_answers = [agent.get_final_answer() for agent in self.agents]
+                for agent in self.agents:
+                    # Gather other agents' responses
+                    other_responses = []
+                    for other_agent in self.agents:
+                        if other_agent.agent_id != agent.agent_id:
+                            other_responses.append({
+                                "agent_id": other_agent.agent_id,
+                                "response": other_agent.history[-1]["response"]
+                            })
 
-        from utils import majority_vote
-        consensus = majority_vote(final_answers)
+                    result = agent.debate_round(question, other_responses, round_num)
+                    round_data[agent.agent_id] = {
+                        "model": agent.model_name,
+                        "response": result["response"],
+                        "answer": result["extracted_answer"],
+                        "confidence": result["confidence"]
+                    }
+
+                    if verbose:
+                        print(f"\nAgent {agent.agent_id} ({agent.model_name}):")
+                        print(f"Answer: {result['extracted_answer']}")
+                        print(f"Confidence: {result['confidence']}")
+                        changed = "CHANGED" if agent.changed_answer() else "unchanged"
+                        print(f"Status: {changed}")
+
+                rounds_data.append(round_data)
+
+                # Check for early consensus after each round
+                if enable_early_stopping and round_num < n_rounds - 1:
+                    early_result = self._check_early_consensus(verbose)
+                    if early_result:
+                        early_stopped = True
+                        consensus = early_result["answer"]
+                        vote_result = {
+                            "answer": consensus,
+                            "method": "early_consensus",
+                            "is_tie": False
+                        }
+                        break
+
+        # Determine consensus using weighted voting (if not early stopped)
+        if not early_stopped:
+            final_answers = [agent.get_final_answer() for agent in self.agents]
+            final_confidences = [agent.get_final_confidence() for agent in self.agents]
+            final_responses = [agent.get_final_response() for agent in self.agents]
+
+            vote_result = weighted_vote(final_answers, final_confidences, final_responses)
+            consensus = vote_result["answer"]
+
+            if verbose:
+                print(f"\n[WEIGHTED VOTING]")
+                print(f"Vote details: {vote_result['vote_details']}")
+                print(f"Method: {vote_result['method']}")
+
+            # Handle ties with judge
+            if vote_result.get("is_tie") and vote_result.get("method") == "unresolved_tie":
+                tied_answers = vote_result.get("tied_answers", [])
+                tiebreaker_result = self._run_tiebreaker(question, tied_answers, verbose)
+                if tiebreaker_result.get("judged_answer") is not None:
+                    consensus = tiebreaker_result["judged_answer"]
+                    vote_result["method"] = "judge_tiebreaker"
+
+        # Run verification round
+        if enable_verification and consensus is not None:
+            verification_result = self._run_verification(question, consensus, verbose)
+            if not verification_result.get("verified", True):
+                # Verifier rejected - use their answer if available
+                if verification_result.get("final_answer") is not None:
+                    consensus = verification_result["final_answer"]
 
         # Track which agents changed their answers
         changes = {
@@ -359,10 +593,19 @@ class MultiAgentDebate:
                 agent.agent_id: agent.get_final_answer()
                 for agent in self.agents
             },
+            "final_confidences": {
+                agent.agent_id: agent.get_final_confidence()
+                for agent in self.agents
+            },
             "consensus": consensus,
+            "vote_result": vote_result,
             "answer_changes": changes,
             "n_agents": len(self.agents),
-            "n_rounds": n_rounds
+            "n_rounds": len(rounds_data),  # Actual rounds run
+            "n_rounds_requested": n_rounds,
+            "early_stopped": early_stopped,
+            "verification": verification_result,
+            "tiebreaker": tiebreaker_result
         }
 
         if verbose:
@@ -370,14 +613,19 @@ class MultiAgentDebate:
             print("FINAL RESULTS")
             print('='*60)
             print(f"Final answers: {result['final_answers']}")
+            print(f"Final confidences: {result['final_confidences']}")
             print(f"Consensus answer: {consensus}")
+            print(f"Voting method: {vote_result.get('method', 'unknown')}")
+            print(f"Early stopped: {early_stopped}")
+            if verification_result:
+                print(f"Verification: {'PASSED' if verification_result.get('verified') else 'CORRECTED'}")
             print(f"Agents that changed answer: {[k for k, v in changes.items() if v]}")
 
         return result
 
 
 def single_agent_solve(question: str, model: str = "llama3.1:8b",
-                       temperature: float = 0.7, verbose: bool = False) -> Dict[str, Any]:
+                       temperature: float = 0.1, verbose: bool = False) -> Dict[str, Any]:
     """
     Solve a problem with a single agent (baseline).
 
